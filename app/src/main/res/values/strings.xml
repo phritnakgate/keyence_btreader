@@ -2,4 +2,5 @@
     <string name="app_name">keyence_btreader</string>
     <string name="app_title">Keyence Bluetooth Reader</string>
     <string name="barcode_hint">Barcode</string>
+    <string name="select_btn">Select Bluetooth Device</string>
 </resources>
