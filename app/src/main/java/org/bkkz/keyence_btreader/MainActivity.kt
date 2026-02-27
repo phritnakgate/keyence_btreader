@@ -1,23 +1,52 @@
 package org.bkkz.keyence_btreader
 
-import android.bluetooth.BluetoothAdapter
+import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import android.widget.EditText
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import com.keyence.autoid.sdk.scan.DecodeResult
-import com.keyence.autoid.sdk.scan.ScanManager
 
-class MainActivity : AppCompatActivity(), ScanManager.DataListener{
-
-    //Data
-    private lateinit var scanManager: ScanManager
-    private lateinit var bluetoothAdapter: BluetoothAdapter
+class MainActivity : AppCompatActivity(){
 
     //UI
     private lateinit var edtBarcode: EditText
+
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if(permissions[Manifest.permission.BLUETOOTH_CONNECT] == true){
+            val serviceIntent = Intent(this, ScannerService::class.java)
+            ContextCompat.startForegroundService(this, serviceIntent)
+        }else{
+            Toast.makeText(this@MainActivity, "Allow Bluetooth First!", Toast.LENGTH_SHORT)
+        }
+
+    }
+
+    private val barcodeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            Log.d("MainActivity","Broadcast Received")
+            if (intent?.action == "ACTION_BARCODE_SCANNED") {
+                val scannedData = intent.getStringExtra("EXTRA_BARCODE_DATA") ?: ""
+
+                runOnUiThread {
+                    edtBarcode.setText(scannedData)
+                    edtBarcode.setSelection(edtBarcode.text.length)
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,8 +65,18 @@ class MainActivity : AppCompatActivity(), ScanManager.DataListener{
         }
     }
     private fun setupData(){
-        scanManager = ScanManager.createScanManager(this)
-        scanManager.addDataListener(this)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+            != PackageManager.PERMISSION_GRANTED) {
+            requestPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.BLUETOOTH_CONNECT,
+                    Manifest.permission.BLUETOOTH_SCAN
+                )
+            )
+        } else {
+            val serviceIntent = Intent(this, ScannerService::class.java)
+            ContextCompat.startForegroundService(this, serviceIntent)
+        }
     }
 
     private fun findView(){
@@ -52,17 +91,26 @@ class MainActivity : AppCompatActivity(), ScanManager.DataListener{
 
     }
 
-    override fun onDataReceived(p0: DecodeResult?) {
-        val data = p0?.data ?: ""
-        runOnUiThread {
-            edtBarcode.setText(data)
+    override fun onResume() {
+        super.onResume()
+        val filter = IntentFilter("ACTION_BARCODE_SCANNED")
+        ContextCompat.registerReceiver(
+            this,
+            barcodeReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try {
+            unregisterReceiver(barcodeReceiver)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Unregister failed", e)
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        scanManager.removeDataListener(this)
-        scanManager.releaseScanManager()
-    }
 
 }
