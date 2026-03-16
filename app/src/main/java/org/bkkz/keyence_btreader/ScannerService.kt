@@ -5,9 +5,12 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothSocket
-import android.content.Context
+import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothStatusCodes
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
@@ -18,20 +21,21 @@ import com.keyence.autoid.sdk.scan.ScanManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.io.IOException
-import java.io.OutputStream
 import java.util.UUID
 
 class ScannerService : Service(), ScanManager.DataListener {
 
-    //Keyence ScanManager
+    // Keyence ScanManager
     private lateinit var scanManager: ScanManager
     private val CHANNEL_ID = "ScannerServiceChannel"
 
-    //Bluetooth Connection Service
-    private var btSocket: BluetoothSocket? = null
-    private var outputStream: OutputStream? = null
-    private val sppUUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+    // --- BLE Connection Variables ---
+    private var bluetoothGatt: BluetoothGatt? = null
+    private var rxCharacteristic: BluetoothGattCharacteristic? = null
+
+    // Define same UUIDs with ESP32 BLE UART
+    private val SERVICE_UUID = UUID.fromString("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
+    private val RX_CHAR_UUID = UUID.fromString("6E400002-B5A3-F393-E0A9-E50E24DCCA9E") // ESP Rx = Android Tx
 
     override fun onCreate() {
         super.onCreate()
@@ -39,7 +43,7 @@ class ScannerService : Service(), ScanManager.DataListener {
 
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Scanner App Working")
-            .setContentText("TESTTEST")
+            .setContentText("Listening for Barcodes (BLE Mode)")
             .setSmallIcon(R.mipmap.ic_launcher)
             .build()
 
@@ -71,24 +75,47 @@ class ScannerService : Service(), ScanManager.DataListener {
     private fun connectToDevice(macAddress: String) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                btSocket?.close()
+                bluetoothGatt?.close()
 
                 val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
                 val device = bluetoothManager.adapter?.getRemoteDevice(macAddress)
 
-                bluetoothManager.adapter?.cancelDiscovery()
+                bluetoothGatt = device?.connectGatt(this@ScannerService, false, gattCallback)
 
-                btSocket = device?.createRfcommSocketToServiceRecord(sppUUID)
-                btSocket?.connect()
-                outputStream = btSocket?.outputStream
-
-                Log.i("Bluetooth", "Connected to $macAddress")
-                broadcastBtStatus("Connected With (${device?.name})")
-
-            } catch (e: IOException) {
-                Log.e("Bluetooth", "Connection Failed", e)
+                Log.i("BLE", "Connecting to GATT Server: $macAddress")
+            } catch (e: Exception) {
+                Log.e("BLE", "Connection Initiation Failed", e)
                 broadcastBtStatus("Connection Failed")
-                try { btSocket?.close() } catch (ex: Exception) { }
+            }
+        }
+    }
+
+    private val gattCallback = object : BluetoothGattCallback() {
+        @SuppressLint("MissingPermission")
+        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            if (newState == BluetoothProfile.STATE_CONNECTED) {
+                Log.i("BLE", "Connected to GATT server.")
+                broadcastBtStatus("Connected")
+                gatt.discoverServices()
+            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                Log.i("BLE", "Disconnected from GATT server.")
+                broadcastBtStatus("Disconnected")
+                rxCharacteristic = null
+            }
+        }
+
+        @SuppressLint("MissingPermission")
+        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                val service = gatt.getService(SERVICE_UUID)
+                if (service != null) {
+                    rxCharacteristic = service.getCharacteristic(RX_CHAR_UUID)
+                    Log.i("BLE", "UART Service & RX Characteristic Found!")
+                    gatt.requestMtu(256)
+                } else {
+                    Log.e("BLE", "UART Service NOT Found on device!")
+                    broadcastBtStatus("Service Mismatch")
+                }
             }
         }
     }
@@ -103,6 +130,7 @@ class ScannerService : Service(), ScanManager.DataListener {
     override fun onDataReceived(p0: DecodeResult?) {
         val data = p0?.data ?: ""
         Log.i("MyScannerService", "Read: $data")
+
         val intent = Intent("ACTION_BARCODE_SCANNED")
         intent.putExtra("EXTRA_BARCODE_DATA", data)
         intent.setPackage(packageName)
@@ -110,11 +138,40 @@ class ScannerService : Service(), ScanManager.DataListener {
         sendDataToESP32(data)
     }
 
+    @SuppressLint("MissingPermission")
+    private fun sendDataToESP32(data: String) {
+        val char = rxCharacteristic
+        val gatt = bluetoothGatt
+
+        if (gatt != null && char != null) {
+            val message = "$data\n"
+
+            val payload = message.toByteArray(Charsets.UTF_8)
+            val writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+
+            val success = gatt.writeCharacteristic(char, payload, writeType) == BluetoothStatusCodes.SUCCESS
+            if (success) {
+                Log.i("BLE", "Sent to ESP32: $data")
+            } else {
+                Log.e("BLE", "Failed to write characteristic")
+                broadcastBtStatus("Error Sending")
+            }
+        } else {
+            Log.w("BLE", "Cannot send, GATT or Characteristic not ready")
+            broadcastBtStatus("Disconnected (No GATT)")
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         scanManager.removeDataListener(this)
         scanManager.releaseScanManager()
-        try { btSocket?.close() } catch (e: Exception) { }
+
+        @SuppressLint("MissingPermission")
+        try {
+            bluetoothGatt?.disconnect()
+            bluetoothGatt?.close()
+        } catch (e: Exception) { }
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -129,24 +186,5 @@ class ScannerService : Service(), ScanManager.DataListener {
         )
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(serviceChannel)
-    }
-
-    private fun sendDataToESP32(data: String) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                if (btSocket?.isConnected == true && outputStream != null) {
-                    val message = "$data\n"
-                    outputStream?.write(message.toByteArray())
-                    outputStream?.flush()
-                    Log.i("Bluetooth", "Sent: $data")
-                } else {
-                    Log.w("Bluetooth", "Cannot send, socket not connected")
-                    broadcastBtStatus("Disconnected")
-                }
-            } catch (e: IOException) {
-                Log.e("Bluetooth", "Send Error", e)
-                broadcastBtStatus("Error Sending to ESP32")
-            }
-        }
     }
 }
