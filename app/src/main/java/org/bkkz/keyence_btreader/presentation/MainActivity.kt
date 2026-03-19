@@ -1,4 +1,4 @@
-package org.bkkz.keyence_btreader
+package org.bkkz.keyence_btreader.presentation
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -22,6 +22,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import org.bkkz.keyence_btreader.R
+import org.bkkz.keyence_btreader.utils.BluetoothStatus
 
 class MainActivity : AppCompatActivity(){
 
@@ -55,10 +57,16 @@ class MainActivity : AppCompatActivity(){
                 }
 
                 "ACTION_BT_STATUS" -> {
-                    val statusMsg = intent.getStringExtra("EXTRA_STATUS") ?: ""
+                    val statusMsg = intent.getSerializableExtra("EXTRA_STATUS", BluetoothStatus::class.java)
+                    val connectedDeviceName = intent.getStringExtra("EXTRA_DEVICE_NAME")
                     runOnUiThread {
-                        txtDevice.text = "Bluetooth: $statusMsg"
-                        txtDevice.setTextColor(Color.GREEN)
+                        if(statusMsg?.isConnected == true){
+                            txtDevice.text = statusMsg?.statusMessage + connectedDeviceName
+                            txtDevice.setTextColor(Color.GREEN)
+                        }else{
+                            txtDevice.text = statusMsg?.statusMessage
+                            txtDevice.setTextColor(Color.RED)
+                        }
                     }
                 }
             }

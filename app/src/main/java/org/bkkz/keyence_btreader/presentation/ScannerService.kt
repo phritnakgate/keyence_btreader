@@ -1,4 +1,4 @@
-package org.bkkz.keyence_btreader
+package org.bkkz.keyence_btreader.presentation
 
 import android.annotation.SuppressLint
 import android.app.Notification
@@ -8,6 +8,7 @@ import android.app.Service
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
@@ -20,10 +21,19 @@ import com.keyence.autoid.sdk.scan.DecodeResult
 import com.keyence.autoid.sdk.scan.ScanManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.bkkz.keyence_btreader.R
+import org.bkkz.keyence_btreader.data.local.AppDatabase
+import org.bkkz.keyence_btreader.data.local.BarcodeLogRecord
+import org.bkkz.keyence_btreader.data.local.BarcodeLogRecordDao
+import org.bkkz.keyence_btreader.utils.BluetoothStatus
 import java.util.UUID
 
 class ScannerService : Service(), ScanManager.DataListener {
+
+    private lateinit var db: AppDatabase
+    private lateinit var barcodeDao: BarcodeLogRecordDao
 
     // Keyence ScanManager
     private lateinit var scanManager: ScanManager
@@ -32,13 +42,20 @@ class ScannerService : Service(), ScanManager.DataListener {
     // --- BLE Connection Variables ---
     private var bluetoothGatt: BluetoothGatt? = null
     private var rxCharacteristic: BluetoothGattCharacteristic? = null
+    private var txCharacteristic: BluetoothGattCharacteristic? = null
 
     // Define same UUIDs with ESP32 BLE UART
     private val SERVICE_UUID = UUID.fromString("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
-    private val RX_CHAR_UUID = UUID.fromString("6E400002-B5A3-F393-E0A9-E50E24DCCA9E") // ESP Rx = Android Tx
+    private val RX_CHAR_UUID = UUID.fromString("6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
+    private val TX_CHAR_UUID = UUID.fromString("6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
+    private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805F9B34FB")
 
     override fun onCreate() {
         super.onCreate()
+
+        db = AppDatabase.getDatabase(this)
+        barcodeDao = db.barcodeDao()
+
         createNotificationChannel()
 
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -76,16 +93,14 @@ class ScannerService : Service(), ScanManager.DataListener {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 bluetoothGatt?.close()
-
                 val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
                 val device = bluetoothManager.adapter?.getRemoteDevice(macAddress)
-
                 bluetoothGatt = device?.connectGatt(this@ScannerService, false, gattCallback)
 
                 Log.i("BLE", "Connecting to GATT Server: $macAddress")
             } catch (e: Exception) {
                 Log.e("BLE", "Connection Initiation Failed", e)
-                broadcastBtStatus("Connection Failed")
+                broadcastBtStatus(BluetoothStatus.CONNECTION_FAILED)
             }
         }
     }
@@ -94,12 +109,12 @@ class ScannerService : Service(), ScanManager.DataListener {
         @SuppressLint("MissingPermission")
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                Log.i("BLE", "Connected to GATT server.")
-                broadcastBtStatus("Connected")
+                Log.i("BLE", "Connected to GATT server (${gatt.device.name}).")
+                broadcastBtStatus(BluetoothStatus.CONNECTION_SUCCESS, gatt.device.name)
                 gatt.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Log.i("BLE", "Disconnected from GATT server.")
-                broadcastBtStatus("Disconnected")
+                broadcastBtStatus(BluetoothStatus.DISCONNECT)
                 rxCharacteristic = null
             }
         }
@@ -110,55 +125,137 @@ class ScannerService : Service(), ScanManager.DataListener {
                 val service = gatt.getService(SERVICE_UUID)
                 if (service != null) {
                     rxCharacteristic = service.getCharacteristic(RX_CHAR_UUID)
-                    Log.i("BLE", "UART Service & RX Characteristic Found!")
+                    txCharacteristic = service.getCharacteristic(TX_CHAR_UUID)
+
+                    if (txCharacteristic != null) {
+                        gatt.setCharacteristicNotification(txCharacteristic, true)
+                        val descriptor = txCharacteristic!!.getDescriptor(CCCD_UUID)
+                        if (descriptor != null) {
+                            gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                        }
+                    }
+                    Log.i("BLE", "UART TX RX Characteristic Found!")
                     gatt.requestMtu(256)
+                    resendPendingData()
                 } else {
                     Log.e("BLE", "UART Service NOT Found on device!")
-                    broadcastBtStatus("Service Mismatch")
+                    broadcastBtStatus(BluetoothStatus.SERVICE_MISMATCH)
                 }
+            }
+        }
+
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray
+        ) {
+            if (characteristic.uuid == TX_CHAR_UUID) {
+                processAckResponse(value)
+            }
+        }
+
+        override fun onDescriptorWrite(
+            gatt: BluetoothGatt,
+            descriptor: BluetoothGattDescriptor,
+            status: Int
+        ) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                Log.i("BLE", "Notification enabled")
             }
         }
     }
 
-    private fun broadcastBtStatus(status: String) {
+    private fun processAckResponse(value: ByteArray) {
+        val response = String(value, Charsets.UTF_8).trim()
+        Log.i("BLE_RECV", "Received from ESP32: $response")
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                if (response.startsWith("ACK:")) {
+                    val idStr = response.substringAfter("ACK:")
+                    val recordId = idStr.toIntOrNull()
+
+                    if (recordId != null) {
+                        val record = barcodeDao.getRecordById(recordId)
+                        if (record.status.toInt() != 2) {
+                            record.status = 2
+                            record.reachedGatewayTimestamp = System.currentTimeMillis()
+                            barcodeDao.updateLogRecord(record)
+
+                            Log.i("DB_UPDATE", "Record ID $recordId status updated to 2 (Reached Gateway)")
+                        }
+                    }
+                } else if (response.startsWith("FAIL:")) {
+                    Log.w("BLE_RECV", "Gateway rejected or LoRa failed for: $response")
+                }
+            } catch (e: Exception) {
+                Log.e("BLE_RECV", "Error parsing response", e)
+            }
+        }
+    }
+
+    private fun broadcastBtStatus(status: BluetoothStatus, deviceName: String? = null) {
         val intent = Intent("ACTION_BT_STATUS")
         intent.putExtra("EXTRA_STATUS", status)
+        intent.putExtra("EXTRA_DEVICE_NAME", deviceName)
         intent.setPackage(packageName)
         sendBroadcast(intent)
     }
 
     override fun onDataReceived(p0: DecodeResult?) {
         val data = p0?.data ?: ""
-        Log.i("MyScannerService", "Read: $data")
+        Log.i("ScannerService", "Read: $data")
 
         val intent = Intent("ACTION_BARCODE_SCANNED")
         intent.putExtra("EXTRA_BARCODE_DATA", data)
         intent.setPackage(packageName)
         sendBroadcast(intent)
-        sendDataToESP32(data)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val newRecord = BarcodeLogRecord(
+                barcode = data,
+                status = 0,
+                scannedTimeStamp = System.currentTimeMillis()
+            )
+            val recordId = barcodeDao.insertLogRecord(newRecord)
+            val savedRecord = newRecord.copy(id = recordId.toInt())
+            sendDataToESP32(savedRecord)
+        }
     }
 
     @SuppressLint("MissingPermission")
-    private fun sendDataToESP32(data: String) {
+    private suspend fun sendDataToESP32(record: BarcodeLogRecord) {
         val char = rxCharacteristic
         val gatt = bluetoothGatt
 
         if (gatt != null && char != null) {
-            val message = "$data\n"
-
+            val message = "${record.id}:${record.barcode}\n"
             val payload = message.toByteArray(Charsets.UTF_8)
             val writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            val success =
+                gatt.writeCharacteristic(char, payload, writeType) == BluetoothStatusCodes.SUCCESS
 
-            val success = gatt.writeCharacteristic(char, payload, writeType) == BluetoothStatusCodes.SUCCESS
             if (success) {
-                Log.i("BLE", "Sent to ESP32: $data")
+                record.status = 1
+                barcodeDao.updateLogRecord(record)
+                Log.i("BLE", "Sent to ESP32: ${record.barcode}")
             } else {
                 Log.e("BLE", "Failed to write characteristic")
-                broadcastBtStatus("Error Sending")
+                broadcastBtStatus(BluetoothStatus.FAILED_TO_SEND_DATA)
             }
         } else {
             Log.w("BLE", "Cannot send, GATT or Characteristic not ready")
-            broadcastBtStatus("Disconnected (No GATT)")
+            broadcastBtStatus(BluetoothStatus.DISCONNECT)
+        }
+    }
+
+    private fun resendPendingData() {
+        CoroutineScope(Dispatchers.IO).launch {
+            val pending = barcodeDao.getPendingRecords()
+            for (record in pending) {
+                sendDataToESP32(record)
+                delay(2000)
+            }
         }
     }
 
