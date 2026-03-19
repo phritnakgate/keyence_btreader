@@ -205,22 +205,24 @@ class ScannerService : Service(), ScanManager.DataListener {
     override fun onDataReceived(p0: DecodeResult?) {
         val data = p0?.data ?: ""
         Log.i("ScannerService", "Read: $data")
+        if(data.isNotEmpty()){
+            val intent = Intent("ACTION_BARCODE_SCANNED")
+            intent.putExtra("EXTRA_BARCODE_DATA", data)
+            intent.setPackage(packageName)
+            sendBroadcast(intent)
 
-        val intent = Intent("ACTION_BARCODE_SCANNED")
-        intent.putExtra("EXTRA_BARCODE_DATA", data)
-        intent.setPackage(packageName)
-        sendBroadcast(intent)
-
-        CoroutineScope(Dispatchers.IO).launch {
-            val newRecord = BarcodeLogRecord(
-                barcode = data,
-                status = 0,
-                scannedTimeStamp = System.currentTimeMillis()
-            )
-            val recordId = barcodeDao.insertLogRecord(newRecord)
-            val savedRecord = newRecord.copy(id = recordId.toInt())
-            sendDataToESP32(savedRecord)
+            CoroutineScope(Dispatchers.IO).launch {
+                val newRecord = BarcodeLogRecord(
+                    barcode = data,
+                    status = 0,
+                    scannedTimeStamp = System.currentTimeMillis()
+                )
+                val recordId = barcodeDao.insertLogRecord(newRecord)
+                val savedRecord = newRecord.copy(id = recordId.toInt())
+                sendDataToESP32(savedRecord)
+            }
         }
+
     }
 
     @SuppressLint("MissingPermission")
