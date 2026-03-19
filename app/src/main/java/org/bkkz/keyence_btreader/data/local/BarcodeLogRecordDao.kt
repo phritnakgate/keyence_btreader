@@ -25,4 +25,7 @@ interface BarcodeLogRecordDao {
 
     @Query("SELECT * FROM BarcodeLog WHERE scannedTimeStamp >= :thirtyDaysAgo ORDER BY scannedTimeStamp DESC")
     suspend fun getRecordsForCsv(thirtyDaysAgo: Long): List<BarcodeLogRecord>
+
+    @Query("DELETE FROM BarcodeLog")
+    suspend fun clearAllLogs()
 }

@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.ImageView
 import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -86,7 +87,18 @@ class LogScreenActivity : AppCompatActivity() {
 
         }
         clearLogBtn.setOnClickListener {
-
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.alert_del_log_title))
+                .setMessage(getString(R.string.alert_del_log_desc))
+                .setPositiveButton(getString(R.string.confirm)) { dialog, _ ->
+                    viewModel.clearAllLogs()
+                    dialog.dismiss()
+                }
+                .setNegativeButton(getString(R.string.cancel)) { dialog, _ ->
+                    dialog.dismiss()
+                }
+                .setCancelable(false)
+                .show()
         }
     }
 }

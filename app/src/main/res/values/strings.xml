@@ -1,6 +1,9 @@
 <resources>
     <string name="app_name">keyence_btreader</string>
     <string name="app_title">Keyence Bluetooth Reader</string>
+    <string name="confirm">Confirm</string>
+    <string name="cancel">Cancel</string>
+
     <string name="barcode_hint">Barcode</string>
     <string name="select_btn">Select Bluetooth Device</string>
     <string name="view_log">View Log</string>
@@ -11,4 +14,6 @@
     <string name="recycler_header_time">Timestamp</string>
     <string name="recycler_header_barcode">Barcode</string>
     <string name="recycler_header_status">Status</string>
+    <string name="alert_del_log_title">Confirm clearing all logs?</string>
+    <string name="alert_del_log_desc">All logs will be deleted forever!</string>
 </resources>

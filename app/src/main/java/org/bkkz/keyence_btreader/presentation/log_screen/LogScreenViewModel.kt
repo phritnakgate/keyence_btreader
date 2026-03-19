@@ -2,13 +2,15 @@ package org.bkkz.keyence_btreader.presentation.log_screen
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import org.bkkz.keyence_btreader.data.local.BarcodeLogRecord
 import org.bkkz.keyence_btreader.data.local.BarcodeLogRecordDao
 
-class LogScreenViewModel(dao: BarcodeLogRecordDao) : ViewModel() {
+class LogScreenViewModel(private val dao: BarcodeLogRecordDao) : ViewModel() {
 
     val logRecords: StateFlow<List<BarcodeLogRecord>> = dao.getAllLogs()
         .stateIn(
@@ -17,4 +19,9 @@ class LogScreenViewModel(dao: BarcodeLogRecordDao) : ViewModel() {
             initialValue = emptyList()
         )
 
+    fun clearAllLogs() {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.clearAllLogs()
+        }
+    }
 }
