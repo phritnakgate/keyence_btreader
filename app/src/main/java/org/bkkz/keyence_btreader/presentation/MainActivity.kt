@@ -23,6 +23,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import org.bkkz.keyence_btreader.R
+import org.bkkz.keyence_btreader.presentation.log_screen.LogScreenActivity
 import org.bkkz.keyence_btreader.utils.BluetoothStatus
 
 class MainActivity : AppCompatActivity(){
@@ -31,6 +32,7 @@ class MainActivity : AppCompatActivity(){
     private lateinit var edtBarcode: EditText
     private lateinit var txtDevice: TextView
     private lateinit var btnConnect: Button
+    private lateinit var btnLog: Button
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -108,6 +110,7 @@ class MainActivity : AppCompatActivity(){
         edtBarcode = findViewById(R.id.edttxt_barcode)
         txtDevice = findViewById(R.id.txtview_btdevice)
         btnConnect = findViewById(R.id.btn_select_device)
+        btnLog = findViewById(R.id.btn_open_log)
     }
 
     private fun setupView(){
@@ -142,6 +145,10 @@ class MainActivity : AppCompatActivity(){
                     ContextCompat.startForegroundService(this, connectIntent)
                 }
                 .show()
+        }
+        btnLog.setOnClickListener {
+            val intent = Intent(this@MainActivity, LogScreenActivity::class.java)
+            startActivity(intent)
         }
     }
 

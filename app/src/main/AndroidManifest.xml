@@ -17,6 +17,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Keyence_btreader">
         <activity
+            android:name=".presentation.log_screen.LogScreenActivity"
+            android:exported="false" />
+        <activity
             android:name=".presentation.MainActivity"
             android:exported="true">
             <intent-filter>
@@ -25,12 +28,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
         <service
             android:name=".presentation.ScannerService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="connectedDevice"
-            />
+            android:foregroundServiceType="connectedDevice" />
     </application>
 
 </manifest>

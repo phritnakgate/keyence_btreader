@@ -3,4 +3,12 @@
     <string name="app_title">Keyence Bluetooth Reader</string>
     <string name="barcode_hint">Barcode</string>
     <string name="select_btn">Select Bluetooth Device</string>
+    <string name="view_log">View Log</string>
+
+    <string name="export_csv">Export to CSV</string>
+    <string name="clear_all">Clear All</string>
+    <string name="log_title">Scanned Log</string>
+    <string name="recycler_header_time">Timestamp</string>
+    <string name="recycler_header_barcode">Barcode</string>
+    <string name="recycler_header_status">Status</string>
 </resources>

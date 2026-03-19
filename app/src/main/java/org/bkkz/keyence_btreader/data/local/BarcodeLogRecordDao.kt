@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface BarcodeLogRecordDao {
@@ -15,6 +16,9 @@ interface BarcodeLogRecordDao {
 
     @Query("SELECT * FROM BarcodeLog WHERE id=:id")
     suspend fun getRecordById(id: Int) : BarcodeLogRecord
+
+    @Query("SELECT * FROM BarcodeLog ORDER BY scannedTimeStamp DESC")
+    fun getAllLogs(): Flow<List<BarcodeLogRecord>>
 
     @Query("SELECT * FROM BarcodeLog WHERE status < 2")
     suspend fun getPendingRecords() : List<BarcodeLogRecord>

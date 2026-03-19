@@ -34,6 +34,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
+    buildFeatures {
+        viewBinding = true
+    }
 }
 
 dependencies {
@@ -47,6 +51,8 @@ dependencies {
     implementation("androidx.room:room-runtime:${roomVersion}")
     ksp("androidx.room:room-compiler:$roomVersion")
     implementation("androidx.room:room-ktx:${roomVersion}")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
