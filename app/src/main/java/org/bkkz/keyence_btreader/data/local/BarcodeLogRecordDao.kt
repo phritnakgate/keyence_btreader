@@ -28,4 +28,7 @@ interface BarcodeLogRecordDao {
 
     @Query("DELETE FROM BarcodeLog")
     suspend fun clearAllLogs()
+
+    @Query("DELETE FROM sqlite_sequence WHERE name = 'BarcodeLog'")
+    suspend fun resetPrimaryKey()
 }

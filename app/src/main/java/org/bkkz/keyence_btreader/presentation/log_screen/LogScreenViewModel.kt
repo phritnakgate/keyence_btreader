@@ -28,6 +28,7 @@ class LogScreenViewModel(private val dao: BarcodeLogRecordDao) : ViewModel() {
     fun clearAllLogs() {
         viewModelScope.launch(Dispatchers.IO) {
             dao.clearAllLogs()
+            dao.resetPrimaryKey()
         }
     }
 
