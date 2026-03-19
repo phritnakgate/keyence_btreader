@@ -16,4 +16,6 @@
     <string name="recycler_header_status">Status</string>
     <string name="alert_del_log_title">Confirm clearing all logs?</string>
     <string name="alert_del_log_desc">All logs will be deleted forever!</string>
+    <string name="alert_file_log_title">File Saved Successfully!</string>
+    <string name="alert_file_log_desc">File saved to Downloads/KeyenceLogs</string>
 </resources>

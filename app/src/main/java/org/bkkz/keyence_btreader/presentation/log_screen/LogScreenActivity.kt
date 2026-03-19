@@ -1,8 +1,12 @@
 package org.bkkz.keyence_btreader.presentation.log_screen
 
+import android.content.ContentValues
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -17,7 +21,7 @@ import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
 import org.bkkz.keyence_btreader.R
 import org.bkkz.keyence_btreader.data.local.AppDatabase
-import org.bkkz.keyence_btreader.databinding.ActivityMainBinding
+import java.io.File
 
 class LogScreenActivity : AppCompatActivity() {
 
@@ -83,9 +87,6 @@ class LogScreenActivity : AppCompatActivity() {
         imgBack.setOnClickListener {
             finish()
         }
-        exportCsvBtn.setOnClickListener {
-
-        }
         clearLogBtn.setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle(getString(R.string.alert_del_log_title))
@@ -99,6 +100,52 @@ class LogScreenActivity : AppCompatActivity() {
                 }
                 .setCancelable(false)
                 .show()
+        }
+        exportCsvBtn.setOnClickListener {
+            lifecycleScope.launch {
+                val directory = cacheDir
+                val csvFile = viewModel.generateCsvFile(directory)
+                if (csvFile != null) {
+                    shareCsvFile(csvFile)
+                    csvFile.delete()
+                } else {
+                    Toast.makeText(this@LogScreenActivity, "No data in past 30 days!", Toast.LENGTH_SHORT).show()
+                }
+
+            }
+        }
+    }
+
+    private fun shareCsvFile(file: File) {
+        try {
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, file.name)
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/KeyenceLogs")
+            }
+
+            val resolver = contentResolver
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+
+            if (uri != null) {
+                resolver.openOutputStream(uri)?.use { outputStream ->
+                    file.inputStream().use { inputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                }
+                AlertDialog.Builder(this)
+                    .setTitle(getString(R.string.alert_file_log_title))
+                    .setMessage(getString(R.string.alert_file_log_desc))
+                    .setPositiveButton(getString(R.string.confirm)) { dialog, _ ->
+                        dialog.dismiss()
+                    }
+                    .show()
+            } else {
+                Toast.makeText(this, "Cannot create CSV file", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 }
