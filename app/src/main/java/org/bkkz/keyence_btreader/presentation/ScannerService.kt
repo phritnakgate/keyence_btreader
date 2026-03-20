@@ -71,6 +71,7 @@ class ScannerService : Service(), ScanManager.DataListener {
         )
 
         setupScanner()
+        startQueueWorker()
     }
 
     private fun setupScanner() {
@@ -136,7 +137,6 @@ class ScannerService : Service(), ScanManager.DataListener {
                     }
                     Log.i("BLE", "UART TX RX Characteristic Found!")
                     gatt.requestMtu(256)
-                    resendPendingData()
                 } else {
                     Log.e("BLE", "UART Service NOT Found on device!")
                     broadcastBtStatus(BluetoothStatus.SERVICE_MISMATCH)
@@ -217,9 +217,7 @@ class ScannerService : Service(), ScanManager.DataListener {
                     status = 0,
                     scannedTimeStamp = System.currentTimeMillis()
                 )
-                val recordId = barcodeDao.insertLogRecord(newRecord)
-                val savedRecord = newRecord.copy(id = recordId.toInt())
-                sendDataToESP32(savedRecord)
+                barcodeDao.insertLogRecord(newRecord)
             }
         }
 
@@ -251,12 +249,28 @@ class ScannerService : Service(), ScanManager.DataListener {
         }
     }
 
-    private fun resendPendingData() {
+    private var isSending = false
+
+    private fun startQueueWorker() {
         CoroutineScope(Dispatchers.IO).launch {
-            val pending = barcodeDao.getPendingRecords()
-            for (record in pending) {
-                sendDataToESP32(record)
-                delay(2000)
+            while (true) {
+                if (bluetoothGatt != null && rxCharacteristic != null && !isSending) {
+                    val pendingList = barcodeDao.getPendingRecords()
+
+                    if (pendingList.isNotEmpty()) {
+                        isSending = true
+                        for (record in pendingList) {
+                            if (bluetoothGatt == null || rxCharacteristic == null) break
+                            val freshRecord = barcodeDao.getRecordById(record.id)
+                            if (freshRecord.status.toInt() < 2) {
+                                sendDataToESP32(freshRecord)
+                                delay(3000)
+                            }
+                        }
+                        isSending = false
+                    }
+                }
+                delay(1000)
             }
         }
     }
