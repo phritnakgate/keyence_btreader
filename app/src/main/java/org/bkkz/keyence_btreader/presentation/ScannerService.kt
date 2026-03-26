@@ -50,6 +50,11 @@ class ScannerService : Service(), ScanManager.DataListener {
     private val TX_CHAR_UUID = UUID.fromString("6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
     private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805F9B34FB")
 
+    // For testing purpose
+    companion object {
+        const val IS_APP_ON_EMULATOR = true
+    }
+
     override fun onCreate() {
         super.onCreate()
 
@@ -69,8 +74,10 @@ class ScannerService : Service(), ScanManager.DataListener {
             notification,
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
         )
+        if(!IS_APP_ON_EMULATOR){
+            setupScanner()
+        }
 
-        setupScanner()
         startQueueWorker()
     }
 
@@ -227,6 +234,15 @@ class ScannerService : Service(), ScanManager.DataListener {
     private suspend fun sendDataToESP32(record: BarcodeLogRecord) {
         val char = rxCharacteristic
         val gatt = bluetoothGatt
+
+        if (IS_APP_ON_EMULATOR) {
+            record.status = 1
+            barcodeDao.updateLogRecord(record)
+            delay(2500)
+            val mockAckMessage = "ACK:${record.id}".toByteArray(Charsets.UTF_8)
+            processAckResponse(mockAckMessage)
+            return
+        }
 
         if (gatt != null && char != null) {
             val message = "${record.id}:${record.barcode}\n"

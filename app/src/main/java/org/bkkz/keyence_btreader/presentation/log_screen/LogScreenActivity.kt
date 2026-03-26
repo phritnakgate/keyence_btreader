@@ -21,6 +21,7 @@ import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
 import org.bkkz.keyence_btreader.R
 import org.bkkz.keyence_btreader.data.local.AppDatabase
+import org.bkkz.keyence_btreader.presentation.ScannerService
 import java.io.File
 
 class LogScreenActivity : AppCompatActivity() {

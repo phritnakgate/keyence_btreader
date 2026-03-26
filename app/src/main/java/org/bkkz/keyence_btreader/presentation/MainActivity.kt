@@ -22,7 +22,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.bkkz.keyence_btreader.R
+import org.bkkz.keyence_btreader.data.local.AppDatabase
+import org.bkkz.keyence_btreader.data.local.BarcodeLogRecord
 import org.bkkz.keyence_btreader.presentation.log_screen.LogScreenActivity
 import org.bkkz.keyence_btreader.utils.BluetoothStatus
 
@@ -120,6 +125,24 @@ class MainActivity : AppCompatActivity(){
     @SuppressLint("MissingPermission")
     private fun setupEvents(){
         btnConnect.setOnClickListener {
+            if(ScannerService.IS_APP_ON_EMULATOR){
+                txtDevice.text = "Running on emulator"
+                txtDevice.setTextColor(Color.GREEN)
+                val fakeBarcode = "8850" + (100000..999999).random().toString()
+                val intent = Intent("ACTION_BARCODE_SCANNED")
+                intent.putExtra("EXTRA_BARCODE_DATA", fakeBarcode)
+                intent.setPackage(packageName)
+                sendBroadcast(intent)
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val newRecord = BarcodeLogRecord(
+                        barcode = fakeBarcode,
+                        status = 0,
+                        scannedTimeStamp = System.currentTimeMillis()
+                    )
+                    AppDatabase.getDatabase(this@MainActivity).barcodeDao().insertLogRecord(newRecord)
+                }
+                return@setOnClickListener
+            }
             val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
             val pairedDevices = bluetoothManager.adapter?.bondedDevices
 
