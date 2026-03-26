@@ -169,6 +169,19 @@ class ScannerService : Service(), ScanManager.DataListener {
         val response = String(value, Charsets.UTF_8).trim()
         Log.i("BLE_RECV", "Received from ESP32: $response")
 
+        if (response.startsWith("GW:")) {
+            val status = response.substringAfter("GW:")
+            val isGatewayOnline = (status == "1")
+
+            val intent = Intent("ACTION_GATEWAY_STATUS")
+            intent.putExtra("EXTRA_IS_ONLINE", isGatewayOnline)
+            intent.setPackage(packageName)
+            sendBroadcast(intent)
+
+            Log.i("BLE_RECV", "Gateway Status Update: Online = $isGatewayOnline")
+            return
+        }
+
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 if (response.startsWith("ACK:")) {
