@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bkkz.keyence_btreader.data.local.BarcodeLogRecord
 import org.bkkz.keyence_btreader.data.local.BarcodeLogRecordDao
+import org.bkkz.keyence_btreader.utils.BarcodeLogType
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -46,7 +47,16 @@ class LogScreenViewModel(private val dao: BarcodeLogRecordDao) : ViewModel() {
                 val file = File(directory, fileName)
 
                 FileWriter(file).use { writer ->
-                    writer.append("Barcode,Scanned Time,Gateway Time\n")
+                    writer.append('\ufeff')
+                    writer.append("Keyence Scanned Log\n")
+                    writer.append("From: xxx - xxx\n")
+                    writer.append("Status Description: \n")
+                    writer.append("Status Code,Description\n")
+                    for(logType in BarcodeLogType.entries){
+                        writer.append("${logType.logCode},${logType.logDesc}\n")
+                    }
+                    writer.append("\n")
+                    writer.append("Barcode,Status,Scanned Time,Gateway Time\n")
                     val format = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
 
                     for (record in records) {
@@ -56,7 +66,7 @@ class LogScreenViewModel(private val dao: BarcodeLogRecordDao) : ViewModel() {
                         } else {
                             "N/A"
                         }
-                        writer.append("${record.barcode},$scanDate,$gatewayDate\n")
+                        writer.append("${record.barcode},${record.status},$scanDate,$gatewayDate\n")
                     }
                 }
                 file
