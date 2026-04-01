@@ -18,6 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.datepicker.MaterialDatePicker
 import kotlinx.coroutines.launch
 import org.bkkz.keyence_btreader.R
 import org.bkkz.keyence_btreader.data.local.AppDatabase
@@ -103,17 +104,28 @@ class LogScreenActivity : AppCompatActivity() {
                 .show()
         }
         exportCsvBtn.setOnClickListener {
-            lifecycleScope.launch {
-                val directory = cacheDir
-                val csvFile = viewModel.generateCsvFile(directory)
-                if (csvFile != null) {
-                    shareCsvFile(csvFile)
-                    csvFile.delete()
-                } else {
-                    Toast.makeText(this@LogScreenActivity, "No data in past 30 days!", Toast.LENGTH_SHORT).show()
-                }
+            val dateRangePicker = MaterialDatePicker.Builder.dateRangePicker()
+                .setTitleText("Select Dates")
+                .build()
 
+            dateRangePicker.show(supportFragmentManager, "DateRangePicker")
+
+            dateRangePicker.addOnPositiveButtonClickListener { selection ->
+                val startDateMillis = selection.first
+                val endDateMillis = selection.second
+                lifecycleScope.launch {
+                    val directory = cacheDir
+                    val csvFile = viewModel.generateCsvFile(directory, startDateMillis, endDateMillis)
+                    if (csvFile != null) {
+                        shareCsvFile(csvFile)
+                        csvFile.delete()
+                    } else {
+                        Toast.makeText(this@LogScreenActivity, "No data in past 30 days!", Toast.LENGTH_SHORT).show()
+                    }
+
+                }
             }
+
         }
     }
 

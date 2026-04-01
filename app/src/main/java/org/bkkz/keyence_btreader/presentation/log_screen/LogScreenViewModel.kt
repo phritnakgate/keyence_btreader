@@ -33,11 +33,14 @@ class LogScreenViewModel(private val dao: BarcodeLogRecordDao) : ViewModel() {
         }
     }
 
-    suspend fun generateCsvFile(directory: File): File? {
+    suspend fun generateCsvFile(directory: File, startDate: Long, endDate: Long): File? {
         return withContext(Dispatchers.IO) {
             try {
-                val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
-                val records = dao.getRecordsForCsv(thirtyDaysAgo)
+                val records: List<BarcodeLogRecord> = if(startDate == endDate){
+                    dao.getRecordsForCsv(startDate, endDate + 86399999L)
+                }else{
+                    dao.getRecordsForCsv(startDate, endDate)
+                }
 
                 if (records.isEmpty()) {
                     return@withContext null
@@ -45,11 +48,17 @@ class LogScreenViewModel(private val dao: BarcodeLogRecordDao) : ViewModel() {
 
                 val fileName = "LogExport_${System.currentTimeMillis()}.csv"
                 val file = File(directory, fileName)
+                val format = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
+                val dateHeaderFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
 
                 FileWriter(file).use { writer ->
                     writer.append('\ufeff')
                     writer.append("Keyence Scanned Log\n")
-                    writer.append("From: xxx - xxx\n")
+                    writer.append("From: ${dateHeaderFormat.format(Date(startDate))} - ${
+                        dateHeaderFormat.format(
+                            Date(endDate)
+                        )
+                    }\n")
                     writer.append("Status Description: \n")
                     writer.append("Status Code,Description\n")
                     for(logType in BarcodeLogType.entries){
@@ -57,7 +66,6 @@ class LogScreenViewModel(private val dao: BarcodeLogRecordDao) : ViewModel() {
                     }
                     writer.append("\n")
                     writer.append("Barcode,Status,Scanned Time,Gateway Time\n")
-                    val format = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
 
                     for (record in records) {
                         val scanDate = format.format(Date(record.scannedTimeStamp))
