@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -12,6 +14,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.widget.doOnTextChanged
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -30,6 +33,9 @@ class LogScreenActivity : AppCompatActivity() {
     private lateinit var imgBack: ImageView
     private lateinit var clearLogBtn: Button
     private lateinit var recyclerLog: RecyclerView
+    private lateinit var edtSearch: EditText
+    private lateinit var imgBtnSearchDate : ImageButton
+    private lateinit var btnClearFilter : Button
     private lateinit var exportCsvBtn: Button
 
 
@@ -57,6 +63,9 @@ class LogScreenActivity : AppCompatActivity() {
         imgBack = findViewById(R.id.imgview_log_back)
         clearLogBtn = findViewById(R.id.btn_log_clear)
         recyclerLog = findViewById(R.id.recyclerview_log)
+        edtSearch = findViewById(R.id.edttxt_search_barcode)
+        imgBtnSearchDate = findViewById(R.id.imgbtn_search_date)
+        btnClearFilter = findViewById(R.id.btn_filter_clear)
         exportCsvBtn = findViewById(R.id.btn_log_export)
     }
     private fun setupData(){
@@ -76,7 +85,8 @@ class LogScreenActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.logRecords.collect { records ->
+                viewModel.state.collect { state ->
+                    val records = state.filteredLogRecords
                     adapter.submitList(records)
                     if (records.isNotEmpty()) {
                         recyclerLog.scrollToPosition(0)
@@ -103,19 +113,23 @@ class LogScreenActivity : AppCompatActivity() {
                 .setCancelable(false)
                 .show()
         }
+        edtSearch.doOnTextChanged { text, _, _, _ ->
+            val query = if(text.isNullOrEmpty()) "" else text.toString()
+            viewModel.onSearchQueryChanged(query)
+        }
+        imgBtnSearchDate.setOnClickListener {
+            showDateRangePicker { start, stop ->
+                viewModel.onDateRangeSelected(start, stop)
+            }
+        }
+        btnClearFilter.setOnClickListener {
+            viewModel.clearFilters()
+        }
         exportCsvBtn.setOnClickListener {
-            val dateRangePicker = MaterialDatePicker.Builder.dateRangePicker()
-                .setTitleText("Select Dates")
-                .build()
-
-            dateRangePicker.show(supportFragmentManager, "DateRangePicker")
-
-            dateRangePicker.addOnPositiveButtonClickListener { selection ->
-                val startDateMillis = selection.first
-                val endDateMillis = selection.second
+            showDateRangePicker { start, end ->
                 lifecycleScope.launch {
                     val directory = cacheDir
-                    val csvFile = viewModel.generateCsvFile(directory, startDateMillis, endDateMillis)
+                    val csvFile = viewModel.generateCsvFile(directory, start, end)
                     if (csvFile != null) {
                         shareCsvFile(csvFile)
                         csvFile.delete()
@@ -125,7 +139,18 @@ class LogScreenActivity : AppCompatActivity() {
 
                 }
             }
+        }
+    }
 
+    private fun showDateRangePicker(onDateSelected: (Long, Long) -> Unit) {
+        val dateRangePicker = MaterialDatePicker.Builder.dateRangePicker()
+            .setTitleText("Select Dates")
+            .build()
+
+        dateRangePicker.show(supportFragmentManager, "DateRangePicker")
+
+        dateRangePicker.addOnPositiveButtonClickListener { selection ->
+            onDateSelected(selection.first, selection.second)
         }
     }
 

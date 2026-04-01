@@ -9,7 +9,7 @@
     <string name="view_log">View Log</string>
 
     <string name="export_csv">Export to CSV</string>
-    <string name="clear_all">Clear All</string>
+    <string name="delete_all_logs">Delete All Logs</string>
     <string name="log_title">Scanned Log</string>
     <string name="recycler_header_time">Timestamp</string>
     <string name="recycler_header_barcode">Barcode</string>
@@ -18,4 +18,5 @@
     <string name="alert_del_log_desc">All logs will be deleted forever!</string>
     <string name="alert_file_log_title">File Saved Successfully!</string>
     <string name="alert_file_log_desc">File saved to Downloads/KeyenceLogs</string>
+    <string name="clear_filter">Clear Filter</string>
 </resources>
