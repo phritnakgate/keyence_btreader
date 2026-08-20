@@ -29,6 +29,7 @@ import org.bkkz.keyence_btreader.data.local.BarcodeLogRecord
 import org.bkkz.keyence_btreader.data.local.BarcodeLogRecordDao
 import org.bkkz.keyence_btreader.utils.BluetoothStatus
 import java.util.UUID
+import kotlin.time.Duration.Companion.milliseconds
 
 class ScannerService : Service(), ScanManager.DataListener {
 
@@ -238,7 +239,7 @@ class ScannerService : Service(), ScanManager.DataListener {
         if (IS_APP_ON_EMULATOR) {
             record.status = 1
             barcodeDao.updateLogRecord(record)
-            delay(2500)
+            delay(2500.milliseconds)
             val mockAckMessage = "ACK:${record.id}".toByteArray(Charsets.UTF_8)
             processAckResponse(mockAckMessage)
             return
@@ -277,16 +278,15 @@ class ScannerService : Service(), ScanManager.DataListener {
                         isSending = true
                         for (record in pendingList) {
                             if (bluetoothGatt == null || rxCharacteristic == null) break
-                            val freshRecord = barcodeDao.getRecordById(record.id)
-                            if (freshRecord.status.toInt() < 2) {
-                                sendDataToESP32(freshRecord)
-                                delay(3000)
+                            if (record.status.toInt() < 2) {
+                                sendDataToESP32(record)
+                                delay(3000.milliseconds)
                             }
                         }
                         isSending = false
                     }
                 }
-                delay(1000)
+                delay(1000.milliseconds)
             }
         }
     }
@@ -300,7 +300,7 @@ class ScannerService : Service(), ScanManager.DataListener {
         try {
             bluetoothGatt?.disconnect()
             bluetoothGatt?.close()
-        } catch (e: Exception) { }
+        } catch (_: Exception) { }
     }
 
     override fun onBind(intent: Intent?): IBinder? {

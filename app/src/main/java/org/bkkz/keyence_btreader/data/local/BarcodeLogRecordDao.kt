@@ -20,7 +20,7 @@ interface BarcodeLogRecordDao {
     @Query("SELECT * FROM BarcodeLog ORDER BY scannedTimeStamp DESC")
     fun getAllLogs(): Flow<List<BarcodeLogRecord>>
 
-    @Query("SELECT * FROM BarcodeLog WHERE status < 2")
+    @Query("SELECT * FROM BarcodeLog WHERE status < 2 ORDER BY id ASC LIMIT 50")
     suspend fun getPendingRecords() : List<BarcodeLogRecord>
 
     @Query("SELECT * FROM BarcodeLog WHERE scannedTimeStamp >= :startDate AND scannedTimeStamp <= :endDate ORDER BY scannedTimeStamp")
